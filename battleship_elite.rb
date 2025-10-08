@@ -64,7 +64,7 @@ POWERUPS = {
 
 AVAILABILITY = {
     true => {text: "AVAILABLE", color: Gosu::Color.argb(255, 0, 255, 0)},
-    false => {text: "NOT READY", color: Gosu::Color.argb(255, 255, 0, 0)}
+    false => {text: "NOT READY", color: ACCENT}
 }
 
 
@@ -112,6 +112,7 @@ class BattleshipElite < Gosu::Window
 
         #setup_variables
         @player_setup = true
+        @opponent_setup = false
         @current_ship_index = 0
         @rotation = Rotation::NORTH
 
@@ -125,6 +126,7 @@ class BattleshipElite < Gosu::Window
         @ocean = initialize_ocean()
         initialize_grid()
         @ships = initialize_ships()
+        generate_opponent_board()
     end
 
         def initialize_grid() #creates a 2D array of a 10x10 grid of cells for both player and opponent
@@ -166,6 +168,50 @@ class BattleshipElite < Gosu::Window
         def player_setup()
             @current_ship = @ships[1][@current_ship_index]
         end
+
+    def generate_opponent_board()
+        grid = @north_grid
+        ship_index = 0
+        while ship_index < 5
+            ship = @ships[0][ship_index]
+            placed = false
+            until placed == true
+                direction = [Rotation::NORTH, Rotation::EAST].sample
+                if direction == Rotation::NORTH
+                    col = rand(9)
+                    row = rand((ship.size - 1)..9)
+                    empty = empty_cells(ship, grid, col, row)
+                    if empty == true
+                        ship.origin = [col, row]
+                        ship.direction = direction
+                        i = 0
+                        while i < ship.size
+                            grid[col][row - i].occupied = true
+                            grid[col][row - i].ship = ship
+                            i += 1
+                        end
+                        placed = true
+                    end
+                elsif direction == Rotation::EAST
+                    col = rand(0..(ship.size + 1))
+                    row = rand(9)
+                    empty = empty_cells(ship, grid, col, row)
+                    if empty == true
+                        ship.origin = [col, row]
+                        ship.direction = direction
+                        i = 0
+                        while i < ship.size
+                            grid[col + i][row].occupied = true
+                            grid[col + i][row].ship = ship
+                            i += 1
+                        end
+                        placed = true
+                    end
+                end
+            end
+            ship_index += 1
+        end
+    end
 
     def draw_ocean(ocean)
         tiles = ocean.tile_frames
@@ -303,10 +349,15 @@ class BattleshipElite < Gosu::Window
         player_index = 0
         while (player_index < 2)
             i = 0
+            if player_index == 0
+                grid = @north_grid
+            else
+                grid = @south_grid
+            end
             while (i < 5)
                 ship = @ships[player_index][i]
                 if ship.origin != nil
-                    cell = @south_grid[ship.origin[0]][ship.origin[1]]
+                    cell = grid[ship.origin[0]][ship.origin[1]]
                     if ship.direction == Rotation::NORTH
                         ship.sprite.draw_rot(cell.x, cell.y + 35, ZOrder::SPRITE, ship.direction, 1, 1)
                     else
@@ -319,7 +370,7 @@ class BattleshipElite < Gosu::Window
         end
     end
 
-    def check_cells(ship, grid, col, row) # checks that all cells for the ship being placed are empty
+    def empty_cells(ship, grid, col, row) # checks that all cells for the ship being placed are empty
         i = 0
         result = true
         while i < ship.size
@@ -333,13 +384,13 @@ class BattleshipElite < Gosu::Window
         return(result)
     end
 
-    def place_ship() #fills the information for the current ship and it's cells based on current placement
+    def place_player_ship() #fills the information for the current ship and it's cells based on current placement
         if @origin != nil
             col = @origin[0]
             row = @origin[1]
             ship = @current_ship
-            grid = @north_grid
-            empty = check_cells(ship, grid, col, row)
+            grid = @south_grid
+            empty = empty_cells(ship, grid, col, row)
             if empty == true
                 ship.origin = [col, row]
                 ship.direction = @rotation
@@ -370,11 +421,11 @@ class BattleshipElite < Gosu::Window
                 @rotation = Rotation::EAST
             when Gosu::MS_LEFT
                 if @player_setup
-                    place_ship()
+                    place_player_ship()
                 end
+                @click_pos = [mouse_x, mouse_y]
         end
     end
-        
 
     def check_grid(player_index, grid)
         pos_x = mouse_x
@@ -414,23 +465,18 @@ class BattleshipElite < Gosu::Window
     def update
         @tick += 1
         @current_pos = mouse_position_grid()
-        if @current_pos != nil
-            print("\rGrid: #{@current_pos[0]}, #{@current_pos[1]}, #{@current_pos[2]}")
-        else
-            print("\rNil")
-        end
-        if @player_setup
-            player_setup()
-        end
+            if @player_setup
+                player_setup()
+            end
     end
 
     def draw
         draw_ocean(@ocean)
         draw_game_title()
         draw_board()
-        if @player_setup == true
-            draw_placement(@current_ship)
-        end
+            if @player_setup
+                draw_placement(@current_ship)
+            end
         draw_ships()
     end
 end
