@@ -18,6 +18,8 @@ CELL_SIZE = 40
 
 ACCENT = Gosu::Color.argb(255 ,255, 87, 129)
 
+MISS = ["You missed.", "Water's not the enemy captain.", "No damage detected.", "*splash*", "Off-target."]
+
 ## GAME BOARD CLASSES
 
 class Ocean
@@ -112,11 +114,12 @@ class BattleshipElite < Gosu::Window
 
         #setup_variables
         @player_setup = true
-        @opponent_setup = false
         @current_ship_index = 0
         @rotation = Rotation::NORTH
         @target = nil
-        @attack = false
+        @end_step = false
+        @hits_in_a_row = 0
+        @game_end = nil
 
         #fonts
         @resource_text = Gosu::Font.new(20, name: 'sprites/BoldPixels.ttf')
@@ -182,7 +185,7 @@ class BattleshipElite < Gosu::Window
                 if direction == Rotation::NORTH
                     col = rand(9)
                     row = rand((ship.size - 1)..9)
-                    empty = empty_cells(ship.size, grid, col, row)
+                    empty = empty_cells(ship.size, grid, col, row, direction)
                     if empty == true
                         ship.origin = [col, row]
                         ship.direction = direction
@@ -195,9 +198,9 @@ class BattleshipElite < Gosu::Window
                         placed = true
                     end
                 elsif direction == Rotation::EAST
-                    col = rand(0..(ship.size + 1))
+                    col = rand(0..(9 - (ship.size + 1)))
                     row = rand(9)
-                    empty = empty_cells(ship.size, grid, col, row)
+                    empty = empty_cells(ship.size, grid, col, row, direction)
                     if empty == true
                         ship.origin = [col, row]
                         ship.direction = direction
@@ -301,11 +304,7 @@ class BattleshipElite < Gosu::Window
         end
     end
 
-    def draw_popup_window(popup_loc)
-        offset = 0
-        if popup_loc == true
-            offset = 550
-        end
+    def draw_popup_window(offset)
         alternate = ((@tick / 60) % 2)
         if alternate == 0
             Gosu.draw_rect(100, 100 + offset, 1000, 10, ACCENT, ZOrder::FRAME)
@@ -353,7 +352,7 @@ class BattleshipElite < Gosu::Window
 
     def draw_placement(ship) #process for everything involved in visually placing ships
         popup_loc = false
-        draw_popup_window(popup_loc)
+        draw_popup_window(0)
         @current_ship = ship
         @alert_header.draw_text_rel("Place your #{ship.name}", 600, 145, ZOrder::POPUP_TEXT, 0.5, 0.5, 1, 1, ACCENT)
         @current_ship.sprite.draw((510 + (5 - ship.size) * 20), 195, ZOrder::POPUP_TEXT)
@@ -386,13 +385,13 @@ class BattleshipElite < Gosu::Window
         end
     end
 
-    def empty_cells(target, grid, col, row) # checks that all cells for the ship being placed are empty
+    def empty_cells(target, grid, col, row, direction) # checks that all cells for the ship being placed are empty
         i = 0
         result = true
         while i < target
-            if @rotation == Rotation::NORTH && grid[col][row - i].occupied == true
+            if direction == Rotation::NORTH && grid[col][row - i].occupied == true
                 result = false
-            elsif @rotation == Rotation::EAST && grid[col + i][row].occupied == true
+            elsif direction == Rotation::EAST && grid[col + i][row].occupied == true
                 result = false
             elsif grid[col][row].occupied == true
                 result = false
@@ -408,7 +407,7 @@ class BattleshipElite < Gosu::Window
             row = @origin[1]
             ship = @current_ship
             grid = @south_grid
-            empty = empty_cells(ship.size, grid, col, row)
+            empty = empty_cells(ship.size, grid, col, row, @rotation)
             if empty == true
                 ship.origin = [col, row]
                 ship.direction = @rotation
@@ -438,7 +437,7 @@ class BattleshipElite < Gosu::Window
     # TURN FUNCTIONS
     def check_ships_hit()
         player_index = 0
-        not_destoryed = true
+        destroyed = true
         while player_index < 2
             ships = @ships[player_index]
             if player_index == 0
@@ -456,21 +455,22 @@ class BattleshipElite < Gosu::Window
                         if cell.hit == true
                             ship.hit = 1
                         else
-                            not_destroyed = true
+                            destroyed = false
                         end
                     elsif ship.direction == Rotation::EAST
                         cell = grid[ship.origin[0] + c][ship.origin[1]]
                         if cell.hit == true
                             ship.hit = 1
                         else
-                            not_destroyed = true
+                            destroyed = false
                         end
-                    end
-                    if not_destoryed != true
-                        ship.hit = 2
                     end
                     c += 1
                 end
+                if destroyed == true
+                    ship.hit = 2
+                end
+                destroyed = true
                 i += 1
             end
             player_index += 1
@@ -485,7 +485,7 @@ class BattleshipElite < Gosu::Window
         end
     end
     
-    def attack()
+    def draw_hit_cells()
         col = 0
         while col < 10
             row = 0
@@ -502,7 +502,7 @@ class BattleshipElite < Gosu::Window
     
     def draw_target()
         popup_loc = true
-        draw_popup_window(popup_loc)
+        draw_popup_window(550)
         @alert_header.draw_text_rel("Select target cell", 600, 750, ZOrder::POPUP_TEXT, 0.5, 0.5, 1, 1, ACCENT)
         draw_preview(0)
     end
@@ -512,18 +512,34 @@ class BattleshipElite < Gosu::Window
             col = @target[0]
             row = @target[1]
             grid = @north_grid
-            grid[col][row].hit = true
+            target = grid[col][row]
+            target.hit = true
             @select_target = false
-            @attack = true
+            if target.occupied == true
+                check_ships_hit()
+                end_condition()
+                if @game_end == 0
+                    @result = "ENEMY DEFEATED. YOU WIN!"
+                elsif target.ship.hit == 2
+                    @result = "Enemy #{target.ship.name} SUNK!"
+                else
+                    @result = "Enemy #{target.ship.name} HIT!"
+                end
+                @hits_in_a_row += 1
+            else
+                @result = MISS.sample
+                @hits_in_a_row = 0
+            end
         end
+        @popup_end = @tick + 200
     end
 
     def player_turn()
-        if @attack != true
+        if @result == nil
             @select_target = true
         end
         player_index = 1
-        check_ships_hit()
+        
     end
 
 
@@ -543,7 +559,7 @@ class BattleshipElite < Gosu::Window
                 if @player_setup
                     select_origin()
                 end
-                if @player_turn
+                if @player_turn && @result == nil #ensures no clicks during result popup
                     select_target()
                 end
                 @click_pos = [mouse_x, mouse_y]
@@ -585,6 +601,27 @@ class BattleshipElite < Gosu::Window
         return(current_pos)
     end
 
+    def end_condition()
+        player_index = 0
+        destroyed = true
+        while player_index < 2
+            ships = @ships[player_index]
+            s = 0
+            while s < ships.length
+                ship = ships[s]
+                if ship.hit < 2
+                    destroyed = false
+                end
+                s += 1
+            end
+            if destroyed == true
+                @game_end = player_index
+            end
+            player_index +=1
+        end
+    end
+
+
     def update
         @tick += 1
         if @player_setup
@@ -594,8 +631,15 @@ class BattleshipElite < Gosu::Window
         if @player_turn
             player_turn()
             @current_pos = mouse_position_grid()
+            if @popup_end < @tick
+                if @game_end != nil
+                    close
+                end
+                @result = nil
+            end
+            check_ships_hit()
         end
-
+        
         
     end
 
@@ -609,11 +653,16 @@ class BattleshipElite < Gosu::Window
             if @player_turn
                 if @select_target
                     draw_target()
-                elsif @attack
-                    attack()
+                end
+                if @result != nil
+                    if @result != false
+                        draw_popup_window(300)
+                        @alert_header.draw_text_rel(@result, 600, 500, ZOrder::POPUP_TEXT, 0.5, 0.5, 1, 1, ACCENT)
+                    end
                 end
             end
         draw_ships()
+        draw_hit_cells()
     end
 end
 
