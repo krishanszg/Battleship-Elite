@@ -12,7 +12,7 @@ In order to playtest the game on your Windows PC, please follow the instructions
   - Download Ruby from <a href="https://rubyinstaller.org/">this website.</a>
   - Select all the available options when running the executable.
   - Upon install completetion, make sure to tick the run command to install ruby gems.
-  - Select option '3'.
+  - Select option '3'. Wait until same options come up again, indicating the install is finished
   - After the install is complete, in CMD on your machine, use the command `ruby -v`
   - If the terminal outputs a version number, Ruby has been installed correctly.
 ### 2. Install Gosu
