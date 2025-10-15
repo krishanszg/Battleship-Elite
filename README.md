@@ -20,8 +20,18 @@ In order to playtest the game on your Windows PC, please follow the instructions
 ### 3. Download Latest Playtesting Release
   - On the right-hand side of this page, download the most recent release source-code as a .zip.
   - Place the folder (un-zipped) on your desktop.
-### 4. Play the Game.
+### 4. Play the Game
   - In order to play, open CMD as non-admin and run the following commands:
   - `cd Desktop`
   - `cd [unzipped_folder_name]`
   - `ruby battleship-elite.rb`
+### 5. Things to Record
+For each game you play, record the following information:
+  - If the game crashed, note the error that appeared in the terminal.
+  - If you are one hit away from winning, do not win, record how many turns it takes for the AI to get to the same position. This counts as a player win.
+  - If the AI had a genuine win, how many ships did you have left to hit?
+
+Examples:
+  - Match 1: Player win, 18 turns until AI caught up.
+  - Match 2: AI win, 2 ships left for player.
+  - Match 3: Crash: RB:107 grid[col][row] unspecified method for 'hit='
