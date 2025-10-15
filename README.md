@@ -22,8 +22,7 @@ In order to playtest the game on your Windows PC, please follow the instructions
   - Place the folder (un-zipped) on your desktop.
 ### 4. Play the Game
   - In order to play, open CMD as non-admin and run the following commands:
-  - `cd Desktop`
-  - `cd [unzipped_folder_name]`
+  - `cd Desktop\[unzipped_folder_name]`
   - `ruby battleship-elite.rb`
 ### 5. Things to Record
 For each game you play, record the following information:
