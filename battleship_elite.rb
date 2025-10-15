@@ -18,7 +18,7 @@ CELL_SIZE = 40
 
 ACCENT = Gosu::Color.argb(255 ,255, 87, 129)
 
-MISS = ["You missed.", "Water's not the enemy captain.", "No damage detected.", "*splash*", "Off-target."]
+MISS = ["Missed.", "No damage detected.", "*splash*", "Off-target."]
 
 ## GAME BOARD CLASSES
 
@@ -90,7 +90,7 @@ class PowerUp
     def initialize(type, player_index)
         powerup_ref = POWERUPS[type]
         @name = powerup_ref[:name]
-        @player_index = player
+        @player_index = player_index
         @active = true
     end
 end
@@ -116,10 +116,15 @@ class BattleshipElite < Gosu::Window
         @player_setup = true
         @current_ship_index = 0
         @rotation = Rotation::NORTH
+        @round_count = 1
         @target = nil
         @end_step = false
-        @hits_in_a_row = 0
+        @player_hits_in_a_row = 0
+        @enemy_hits_in_a_row = 0
+        @enemy_misses_in_a_row = 0
         @game_end = nil
+        @select_new = true
+        @start_animation = true
 
         #fonts
         @resource_text = Gosu::Font.new(20, name: 'sprites/BoldPixels.ttf')
@@ -198,7 +203,7 @@ class BattleshipElite < Gosu::Window
                         placed = true
                     end
                 elsif direction == Rotation::EAST
-                    col = rand(0..(9 - (ship.size + 1)))
+                    col = rand(0..(10 - ship.size))
                     row = rand(9)
                     empty = empty_cells(ship.size, grid, col, row, direction)
                     if empty == true
@@ -304,7 +309,7 @@ class BattleshipElite < Gosu::Window
         end
     end
 
-    def draw_popup_window(offset)
+    def draw_popup_window(offset, button)
         alternate = ((@tick / 60) % 2)
         if alternate == 0
             Gosu.draw_rect(100, 100 + offset, 1000, 10, ACCENT, ZOrder::FRAME)
@@ -318,6 +323,34 @@ class BattleshipElite < Gosu::Window
             Gosu.draw_rect(100, 300 + offset, 1000, 10, Gosu::Color::WHITE, ZOrder::FRAME)
         end
         Gosu.draw_rect(100, 100 + offset, 1000, 200, Gosu::Color.argb(235, 0, 53, 68), ZOrder::POPUP)
+        if button != nil
+            Gosu.draw_rect(500, 210 + offset, 200, 60, ACCENT, ZOrder::FRAME)
+            @title_letter.draw_text_rel(button, 600, 237 + offset, ZOrder::POPUP_TEXT, 0.5, 0.5, 1, 1, Gosu::Color::WHITE)
+            if @button_hover == true
+                Gosu.draw_rect(495, 205 + offset, 210, 5, Gosu::Color::WHITE, ZOrder::POPUP_TEXT)
+                Gosu.draw_rect(495, 205 + offset, 5, 70, Gosu::Color::WHITE, ZOrder::POPUP_TEXT)
+                Gosu.draw_rect(700, 205 + offset, 5, 70, Gosu::Color::WHITE, ZOrder::POPUP_TEXT)
+                Gosu.draw_rect(495, 270 + offset, 210, 5, Gosu::Color::WHITE, ZOrder::POPUP_TEXT)
+            end
+        end
+    end
+
+    def draw_hover(activate)
+        pos_x, pos_y = @mouse_hover
+        if  @annoucement == true &&
+            pos_x >= 500 &&
+            pos_x <= 700 &&
+            pos_y >= 200 &&
+            pos_y <= 260
+                @button_hover = true
+                if activate == true
+                    @annoucement = false
+                    @opponent_select = true
+                    @animation_end = @tick + 50
+                end
+        else
+            @button_hover = false
+        end
     end
 
     def draw_preview(ship) #gets current grid position and draws a green box for how long the ship being placed is
@@ -351,8 +384,7 @@ class BattleshipElite < Gosu::Window
     end
 
     def draw_placement(ship) #process for everything involved in visually placing ships
-        popup_loc = false
-        draw_popup_window(0)
+        draw_popup_window(0, nil)
         @current_ship = ship
         @alert_header.draw_text_rel("Place your #{ship.name}", 600, 145, ZOrder::POPUP_TEXT, 0.5, 0.5, 1, 1, ACCENT)
         @current_ship.sprite.draw((510 + (5 - ship.size) * 20), 195, ZOrder::POPUP_TEXT)
@@ -374,9 +406,17 @@ class BattleshipElite < Gosu::Window
                 if ship.origin != nil
                     cell = grid[ship.origin[0]][ship.origin[1]]
                     if ship.direction == Rotation::NORTH
-                        ship.sprite.draw_rot(cell.x, cell.y + 35, ZOrder::SPRITE, ship.direction, 1, 1)
+                        if player_index == 0 && ship.hit == 2
+                            ship.sprite.draw_rot(cell.x, cell.y + 35, ZOrder::SPRITE, ship.direction, 1, 1)
+                        elsif player_index == 1
+                            ship.sprite.draw_rot(cell.x, cell.y + 35, ZOrder::SPRITE, ship.direction, 1, 1)
+                        end
                     else
-                        ship.sprite.draw(cell.x, cell.y, ZOrder::SPRITE)
+                        if player_index == 0 && ship.hit == 2 
+                            ship.sprite.draw(cell.x, cell.y, ZOrder::SPRITE)
+                        elsif player_index == 1
+                            ship.sprite.draw(cell.x, cell.y, ZOrder::SPRITE)
+                        end
                     end
                 end
                 i += 1
@@ -392,8 +432,6 @@ class BattleshipElite < Gosu::Window
             if direction == Rotation::NORTH && grid[col][row - i].occupied == true
                 result = false
             elsif direction == Rotation::EAST && grid[col + i][row].occupied == true
-                result = false
-            elsif grid[col][row].occupied == true
                 result = false
             end
             i += 1
@@ -418,7 +456,7 @@ class BattleshipElite < Gosu::Window
                         grid[col][row - i].ship = ship
                     else
                         grid[col + i][row].occupied = true
-                        grid[col][row - i].ship = ship
+                        grid[col + i][row].ship = ship
                     end
                     i += 1
                 end
@@ -432,12 +470,47 @@ class BattleshipElite < Gosu::Window
         end
     end
 
-
+    def end_of_attack(player_index, target)
+        if player_index == 1
+            if target.occupied == true
+                check_ships_hit()
+                end_condition()
+                if @game_end == 0
+                    @result = "ENEMY DEFEATED. YOU WIN!"
+                elsif target.ship.hit == 2
+                    @result = "Enemy #{target.ship.name} SUNK!"
+                else
+                    @result = "Enemy #{target.ship.name} HIT!"
+                end
+                @player_hits_in_a_row += 1
+            else
+                @result = MISS.sample
+                @player_hits_in_a_row = 0
+            end
+        else
+            if target.occupied == true
+                check_ships_hit()
+                end_condition()
+                if @game_end == 1
+                    @result = "YOUR FLEET HAS SUNK!"
+                elsif target.ship.hit == 2
+                    @result = "Your #{target.ship.name} has SUNK!"
+                else
+                    @result = "Your #{target.ship.name} has been HIT!"
+                end
+                @enemy_hits_in_a_row += 1
+                @enemy_misses_in_a_row = 0
+            else
+                @result = MISS.sample
+                @enemy_hits_in_a_row = 0
+                @enemy_misses_in_a_row += 1
+            end
+        end
+    end
 
     # TURN FUNCTIONS
     def check_ships_hit()
         player_index = 0
-        destroyed = true
         while player_index < 2
             ships = @ships[player_index]
             if player_index == 0
@@ -448,6 +521,7 @@ class BattleshipElite < Gosu::Window
             i = 0
             while i < ships.length
                 ship = ships[i]
+                destroyed = true
                 c = 0
                 while c < ship.size
                     if ship.direction == Rotation::NORTH
@@ -501,8 +575,7 @@ class BattleshipElite < Gosu::Window
     end
     
     def draw_target()
-        popup_loc = true
-        draw_popup_window(550)
+        draw_popup_window(550, nil)
         @alert_header.draw_text_rel("Select target cell", 600, 750, ZOrder::POPUP_TEXT, 0.5, 0.5, 1, 1, ACCENT)
         draw_preview(0)
     end
@@ -515,37 +588,312 @@ class BattleshipElite < Gosu::Window
             target = grid[col][row]
             target.hit = true
             @select_target = false
-            if target.occupied == true
-                check_ships_hit()
-                end_condition()
-                if @game_end == 0
-                    @result = "ENEMY DEFEATED. YOU WIN!"
-                elsif target.ship.hit == 2
-                    @result = "Enemy #{target.ship.name} SUNK!"
-                else
-                    @result = "Enemy #{target.ship.name} HIT!"
-                end
-                @hits_in_a_row += 1
-            else
-                @result = MISS.sample
-                @hits_in_a_row = 0
-            end
+            end_of_attack(1, target)
         end
-        @popup_end = @tick + 200
+        @popup_end = @tick + 100
     end
 
     def player_turn()
         if @result == nil
             @select_target = true
         end
-        player_index = 1
-        
     end
 
 
+    # OPPONENT TURN FUNCTIONS
+    def opponent_select_animation()
+        grid = @south_grid
+        alternate = ((@tick / 20) % 2)
+        if alternate == 0 && @select_new == true
+            @animate_col = rand(0..9)
+            @animate_row = rand(0..9)
+            @select_new = false
+        elsif alternate == 1 && @select_new == false
+            @animate_col = rand(0..9)
+            @animate_row = rand(0..9)
+            @select_new = true
+        elsif @start_animation == true
+            @animate_col = rand(0..9)
+            @animate_row = rand(0..9)
+            @start_animation = false
+        end
+        @cell_preview.draw(grid[@animate_col][@animate_row].x, grid[@animate_col][@animate_row].y)
+        if @animation_end < @tick
+            @opponent_select = false
+            opponent_attack_select()
+        end
+    end
 
+    def unhit_cell(grid)
+        unhit_cells = Array.new()
+        i = 0
+        while i < 10
+            r = 0
+            while r < 10
+                current = grid[i][r]
+                if current.hit == false && current.occupied == true
+                    unhit_cells << [i, r]
+                end
+                r += 1
+            end
+            i += 1
+        end
+        target = unhit_cells.sample
+        return(target)
+    end
 
+    def least_used(grid)
+        lowest_count = 0
+        target_columns = Array.new()
+        c = 0
+        while c < 10
+            count = 0
+            r = 0
+            while r < 10
+                if grid[c][r].hit == false
+                    count += 1
+                end
+                r += 1
+            end
+            if count == lowest_count
+                target_columns << c
+            elsif count > lowest_count
+                lowest_count = count
+                target_columns = Array.new()
+                target_columns << c
+            end
+            c += 1
+        end
+        lowest_count = 0
+        target_rows = Array.new()
+        r = 0
+        while r < 10
+            count = 0
+            c = 0
+            while c < 10
+                if grid[c][r].hit == false
+                    count += 1
+                end
+                c += 1
+            end
+            if count == lowest_count
+                target_rows << r
+            elsif count > lowest_count
+                lowest_count = count
+                target_rows = Array.new()
+                target_rows << r
+            end
+            r += 1
+        end
+        results = [target_columns.sample, target_rows.sample]
+        return(results)
+    end
 
+    def random_attack(grid, col, row)
+        if @round_count > 0 && @round_count < 7 && row == nil # select random cell not at edge in the first 6 rounds, as long as no ships have been hit
+            target = grid[rand(1..8)][rand(1..8)]
+            target.hit = true
+            puts("Random attack")
+        elsif row == nil && @enemy_misses_in_a_row > 6 #after 6 misses, there is a 25% chance the AI will hit a ship it hasn't hit yet, helps for game balancing
+            chance = rand(0..3)
+            hit = false
+            puts("chance = #{chance.to_s}")
+            until hit == true
+                if chance == 0
+                    col, row = unhit_cell(grid)
+                    target = grid[col][row]
+                    target.hit = true
+                    hit = true
+                else
+                    target = grid[rand(0..9)][rand(0..9)]
+                    if target.hit == false
+                        target.hit = true
+                        hit = true
+                    end
+                end
+            end
+        elsif row == nil # select least used column and grid
+            hit = false
+            col, row = least_used(grid)
+            until hit == true
+                target = grid[col][row]
+                if target.hit == false
+                    target.hit = true
+                    hit = true
+                    puts("Least hit")
+                else
+                    target = grid[rand(0..9)][rand(0..9)]
+                    if target.hit == false
+                        target.hit = true
+                        hit = true
+                        puts("Random fallback")
+                    end
+                end
+            end
+        else
+            grid = @south_grid
+            finished = false
+            until finished == true
+                direction = rand(0..3)
+                if direction == 0 && row > 0 && grid[col][row - 1] && grid[col][row - 1].hit == false
+                    target = grid[col][row - 1]
+                    target.hit = true
+                    finished = true
+                elsif direction == 1 && col < 9 && grid[col + 1][row] && grid[col + 1][row].hit == false
+                    target = grid[col + 1][row]
+                    target.hit = true
+                    finished = true
+                elsif direction == 2 && row < 9 && grid[col][row + 1 ]&& grid[col][row + 1].hit == false
+                    target = grid[col][row + 1]
+                    target.hit = true
+                    finished = true
+                elsif direction == 3 && col > 0 && grid[col - 1][row] && grid[col - 1][row].hit == false
+                    target = grid[col - 1][row]
+                    target.hit = true
+                    finished = true
+                end
+            end
+        end
+        end_of_attack(0, target)
+    end
+
+    def remaining_check(grid, col, row, ship, rotation)
+        range = (ship.size - 2) #two cells have already been checked
+        i = 0
+        candidates = Array.new
+        while i < range
+            if rotation == 0
+                if  (row + 2 + i) < 10 &&
+                    grid[col][row + 2 + i].hit == false
+                        candidates << grid[col][row + 2 + i]
+                end
+                if (row - 1 - i) >= 0 &&
+                    grid[col][row - 1 - i].hit == false
+                        candidates << grid[col][row - 1 - i]
+                end
+            elsif rotation == 1
+                if  (row - 2 - i) >= 0 &&
+                    grid[col][row - 2 - i].hit == false
+                        candidates << grid[col][row - 2 - i]
+                end
+                if (row + 1 + i) < 10 &&
+                    grid[col][row + 1 + i].hit == false
+                        candidates << grid[col][row + 1 + i]
+                end
+            elsif rotation == 2
+                if  (col + 2 + i) < 10 &&
+                    grid[col + 2 + i][row].hit == false
+                        candidates << grid[col + 2 + i][row]
+                end
+                if (col - 1 - i) >= 0 &&
+                    grid[col - 1 - i][row].hit == false
+                        candidates << grid[col - 1 - i][row]
+                end
+            elsif rotation == 3
+                if  (col - 2 - i) >= 0 &&
+                    grid[col - 2 - i][row].hit == false
+                        candidates << grid[col - 2 - i][row]
+                end
+                if (col + 1 + i) < 10 &&
+                    grid[col + 1 + i][row].hit == false
+                        candidates << grid[col + 1 + i][row]
+                end
+            end
+            if candidates.length == 1 #if on first pass there is only one option, it takes it
+                target_cell = candidates[0]
+                break
+            elsif candidates.length == 2 #has one option in either direction after pass
+                target_cell = candidates.sample
+                break
+            end
+            i += 1
+        end
+        target_cell.hit = true
+        end_of_attack(0, target_cell)
+        return(true)
+    end
+
+    def intelligent_attack(grid, red_cells)
+        i = 0
+        attacked = false
+        while i < red_cells.length
+            col = red_cells[i][0]
+            row = red_cells[i][1]
+            ship = grid[col][row].ship
+            if ship.hit == 2
+                i += 1
+            else
+                if  row < 9 &&
+                    grid[col][row + 1].hit == true && 
+                    grid[col][row + 1].occupied == true &&
+                    ship.name == grid[col][row + 1].ship.name #same ship so that function doesn't lead to false results
+                        rotation = 0 #additional hit to the south
+                        attacked = remaining_check(grid, col, row, ship, rotation)
+                elsif row > 0 &&
+                      grid[col][row - 1].hit == true && 
+                      grid[col][row - 1].occupied == true &&
+                      ship.name == grid[col][row - 1].ship.name
+                        rotation = 1
+                        attacked = remaining_check(grid, col, row, ship, rotation)
+                elsif col < 9 &&
+                      grid[col + 1][row].hit == true && 
+                      grid[col + 1][row].occupied == true &&
+                      ship.name == grid[col + 1][row].ship.name
+                        rotation = 2
+                        attacked = remaining_check(grid, col, row, ship, rotation)
+                elsif col > 0 &&
+                      grid[col - 1][row].hit == true && 
+                      grid[col - 1][row].occupied == true &&
+                      ship.name == grid[col - 1][row].ship.name
+                        rotation = 3
+                        attacked = remaining_check(grid, col, row, ship, rotation)
+                else
+                    attacked = random_attack(grid, col, row) #if no other cells from the same ship have been hit
+                end
+                i += 1
+            end
+            if attacked == true
+                break
+            end
+        end
+        return(attacked)
+    end
+
+    def opponent_attack_select()
+        grid = @south_grid
+        col = 0
+        probability = 0
+        red_cells = Array.new()
+        prob_cells = Array.new()
+        while col < 10
+            row = 0
+            while row < 10
+                current_cell = grid[col][row]
+                if current_cell.hit == true && current_cell.occupied == true
+                    red_cells << [col, row]
+                elsif current_cell.hit == true
+                    prob_cells << [probability, col, row]
+                    probability = 0
+                elsif col == 9 && row == 9
+                    prob_cells << [probability, col, row]
+                    probability = 0
+                else
+                    probability += 1
+                end
+                row += 1
+            end
+            col += 1
+        end
+        attacked = false
+        if red_cells[0] != nil
+            attacked = intelligent_attack(grid, red_cells)
+        end
+        if attacked == false
+            random_attack(grid, nil, nil)
+        end
+        @popup_end = @tick + 100
+    end
+                
 
 
 
@@ -561,6 +909,9 @@ class BattleshipElite < Gosu::Window
                 end
                 if @player_turn && @result == nil #ensures no clicks during result popup
                     select_target()
+                end
+                if @annoucement == true
+                    draw_hover(true)
                 end
                 @click_pos = [mouse_x, mouse_y]
         end
@@ -601,10 +952,15 @@ class BattleshipElite < Gosu::Window
         return(current_pos)
     end
 
+    def mouse_position_global()
+        position = [mouse_x, mouse_y]
+        return(position)
+    end
+
     def end_condition()
         player_index = 0
-        destroyed = true
         while player_index < 2
+            destroyed = true
             ships = @ships[player_index]
             s = 0
             while s < ships.length
@@ -616,6 +972,7 @@ class BattleshipElite < Gosu::Window
             end
             if destroyed == true
                 @game_end = player_index
+                break
             end
             player_index +=1
         end
@@ -624,6 +981,7 @@ class BattleshipElite < Gosu::Window
 
     def update
         @tick += 1
+        @mouse_hover = mouse_position_global()
         if @player_setup
             player_setup()
             @current_pos = mouse_position_grid()
@@ -631,16 +989,29 @@ class BattleshipElite < Gosu::Window
         if @player_turn
             player_turn()
             @current_pos = mouse_position_grid()
-            if @popup_end < @tick
+            if @popup_end < @tick && @result != nil
                 if @game_end != nil
                     close
                 end
                 @result = nil
+                @player_turn = false
+                @opponent_turn = true
+                @annoucement = true
             end
             check_ships_hit()
         end
-        
-        
+        if @opponent_turn
+            if @popup_end < @tick && @result != nil
+                if @game_end != nil
+                    close
+                end
+                @result = nil
+                @opponent_turn = false
+                @player_turn = true
+                @round_count += 1
+            end
+            check_ships_hit()
+        end
     end
 
     def draw
@@ -655,10 +1026,22 @@ class BattleshipElite < Gosu::Window
                     draw_target()
                 end
                 if @result != nil
-                    if @result != false
-                        draw_popup_window(300)
-                        @alert_header.draw_text_rel(@result, 600, 500, ZOrder::POPUP_TEXT, 0.5, 0.5, 1, 1, ACCENT)
-                    end
+                    draw_popup_window(300, nil)
+                    @alert_header.draw_text_rel(@result, 600, 500, ZOrder::POPUP_TEXT, 0.5, 0.5, 1, 1, ACCENT)
+                end
+            end
+            if @opponent_turn
+                if @annoucement == true
+                    draw_hover(nil)
+                    draw_popup_window(0, "Ready?")
+                    @alert_header.draw_text_rel("Opponents Turn: Round #{@round_count}", 600, 162, ZOrder::POPUP_TEXT, 0.5, 0.5, 1, 1, ACCENT)
+                end
+                if @opponent_select == true
+                    opponent_select_animation()
+                end
+                if @result != nil
+                    draw_popup_window(0, nil)
+                    @alert_header.draw_text_rel(@result, 600, 200, ZOrder::POPUP_TEXT, 0.5, 0.5, 1, 1, ACCENT)
                 end
             end
         draw_ships()
