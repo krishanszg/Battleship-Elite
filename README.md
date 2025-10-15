@@ -10,7 +10,9 @@ Battleship Elite is stylized with colourful pixel art and an animated ocean.
 In order to playtest the game on your Windows PC, please follow the instructions below.
 ### 1. Install Ruby (5 minutes)
   - Download Ruby from <a href="https://rubyinstaller.org/">this website.</a>
-  - Select all the options when running the executable.
+  - Select all the available options when running the executable.
+  - Upon install completetion, make sure to tick the run command to install ruby gems.
+  - Select option '3'.
   - After the install is complete, in CMD on your machine, use the command `ruby -v`
   - If the terminal outputs a version number, Ruby has been installed correctly.
 ### 2. Install Gosu
